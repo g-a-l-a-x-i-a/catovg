@@ -2,14 +2,20 @@ package space.rawrclient.catovg.draw;
 
 import org.lwjgl.nanovg.NanoVG;
 import space.rawrclient.catovg.color.VGColor;
+import space.rawrclient.catovg.composite.VGBlendFactor;
+import space.rawrclient.catovg.composite.VGCompositeOp;
+import space.rawrclient.catovg.font.VGFont;
+import space.rawrclient.catovg.image.VGImage;
 import space.rawrclient.catovg.paint.VGPaint;
+import space.rawrclient.catovg.stroke.VGLineCap;
+import space.rawrclient.catovg.stroke.VGLineJoin;
 
 import java.nio.FloatBuffer;
 
 import static org.lwjgl.nanovg.NanoVG.*;
 
 /**
- * Stateless immediate-mode drawing helpers on top of NanoVG.
+ * Stateless immediate mode drawing helpers on top of NanoVG.
  * <p>
  * Every method accepts a raw NanoVG context handle and silently does nothing
  * when the handle is {@code 0} or the supplied color/paint is {@code null},
@@ -19,6 +25,9 @@ public final class VGDraw {
 
     /** Default text alignment: left edge, top of the em box. */
     public static final int DEFAULT_TEXT_ALIGN = NVG_ALIGN_LEFT | NVG_ALIGN_TOP;
+
+    private static final ThreadLocal<float[]> SCRATCH_BOUNDS = ThreadLocal.withInitial(() -> new float[4]);
+    private static final ThreadLocal<int[]> SCRATCH_SIZE = ThreadLocal.withInitial(() -> new int[2]);
 
     private VGDraw() {
     }
@@ -277,6 +286,24 @@ public final class VGDraw {
     }
 
     /**
+     * Strokes a straight line segment with a custom line cap.
+     *
+     * @param vg          NanoVG context handle
+     * @param x1          start x
+     * @param y1          start y
+     * @param x2          end x
+     * @param y2          end y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @param cap         line cap style
+     */
+    public static void line(long vg, float x1, float y1, float x2, float y2, float strokeWidth, VGColor color, VGLineCap cap) {
+        if (vg == 0 || color == null) return;
+        if (cap != null) nvgLineCap(vg, cap.id);
+        line(vg, x1, y1, x2, y2, strokeWidth, color);
+    }
+
+    /**
      * Strokes a circular arc.
      *
      * @param vg          NanoVG context handle
@@ -285,7 +312,7 @@ public final class VGDraw {
      * @param radius      radius
      * @param a0          start angle in radians
      * @param a1          end angle in radians
-     * @param dir         {@link NanoVG#NVG_CW} or {@link NanoVG#NVG_CCW}
+     * @param dir         winding direction ({@link NanoVG#NVG_CW} or {@link NanoVG#NVG_CCW})
      * @param strokeWidth stroke width
      * @param color       stroke color
      */
@@ -324,8 +351,149 @@ public final class VGDraw {
     }
 
     /**
-     * Draws a soft drop shadow around a rounded rectangle. The interior of the
-     * rectangle is cut out, so the shadow never darkens translucent content.
+     * Strokes a cubic bezier curve segment.
+     *
+     * @param vg          NanoVG context handle
+     * @param sx          start point x
+     * @param sy          start point y
+     * @param c1x         first control point x
+     * @param c1y         first control point y
+     * @param c2x         second control point x
+     * @param c2y         second control point y
+     * @param ex          end point x
+     * @param ey          end point y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     */
+    public static void bezier(long vg, float sx, float sy, float c1x, float c1y, float c2x, float c2y,
+                              float ex, float ey, float strokeWidth, VGColor color) {
+        if (vg == 0 || color == null) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, sx, sy);
+        nvgBezierTo(vg, c1x, c1y, c2x, c2y, ex, ey);
+        stroke(vg, strokeWidth, color);
+    }
+
+    /**
+     * Strokes a quadratic bezier curve segment.
+     *
+     * @param vg          NanoVG context handle
+     * @param sx          start point x
+     * @param sy          start point y
+     * @param cx          control point x
+     * @param cy          control point y
+     * @param ex          end point x
+     * @param ey          end point y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     */
+    public static void quadCurve(long vg, float sx, float sy, float cx, float cy,
+                                 float ex, float ey, float strokeWidth, VGColor color) {
+        if (vg == 0 || color == null) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, sx, sy);
+        nvgQuadTo(vg, cx, cy, ex, ey);
+        stroke(vg, strokeWidth, color);
+    }
+
+    /**
+     * Strokes a connected series of straight line segments.
+     *
+     * @param vg          NanoVG context handle
+     * @param points      flat array of coordinates [x0, y0, x1, y1, ...]
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     */
+    public static void polyline(long vg, float[] points, float strokeWidth, VGColor color) {
+        if (vg == 0 || color == null || points == null || points.length < 4) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, points[0], points[1]);
+        for (int i = 2; i < points.length - 1; i += 2) {
+            nvgLineTo(vg, points[i], points[i + 1]);
+        }
+        stroke(vg, strokeWidth, color);
+    }
+
+    /**
+     * Strokes a connected series of line segments with custom line cap and line join styles.
+     *
+     * @param vg          NanoVG context handle
+     * @param points      flat array of coordinates [x0, y0, x1, y1, ...]
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @param cap         line cap style
+     * @param join        line join style
+     */
+    public static void polyline(long vg, float[] points, float strokeWidth, VGColor color,
+                                VGLineCap cap, VGLineJoin join) {
+        if (vg == 0 || color == null || points == null || points.length < 4) return;
+        if (cap != null) nvgLineCap(vg, cap.id);
+        if (join != null) nvgLineJoin(vg, join.id);
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, points[0], points[1]);
+        for (int i = 2; i < points.length - 1; i += 2) {
+            nvgLineTo(vg, points[i], points[i + 1]);
+        }
+        stroke(vg, strokeWidth, color);
+    }
+
+    /**
+     * Fills a closed polygon with a solid color.
+     *
+     * @param vg     NanoVG context handle
+     * @param points flat array of coordinates [x0, y0, x1, y1, x2, y2, ...]
+     * @param color  fill color
+     */
+    public static void polygon(long vg, float[] points, VGColor color) {
+        if (vg == 0 || color == null || points == null || points.length < 6) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, points[0], points[1]);
+        for (int i = 2; i < points.length - 1; i += 2) {
+            nvgLineTo(vg, points[i], points[i + 1]);
+        }
+        nvgClosePath(vg);
+        fill(vg, color);
+    }
+
+    /**
+     * Fills a closed polygon with a paint.
+     *
+     * @param vg     NanoVG context handle
+     * @param points flat array of coordinates [x0, y0, x1, y1, x2, y2, ...]
+     * @param paint  fill paint
+     */
+    public static void polygon(long vg, float[] points, VGPaint paint) {
+        if (vg == 0 || paint == null || points == null || points.length < 6) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, points[0], points[1]);
+        for (int i = 2; i < points.length - 1; i += 2) {
+            nvgLineTo(vg, points[i], points[i + 1]);
+        }
+        nvgClosePath(vg);
+        fill(vg, paint);
+    }
+
+    /**
+     * Strokes the outline of a closed polygon.
+     *
+     * @param vg          NanoVG context handle
+     * @param points      flat array of coordinates [x0, y0, x1, y1, x2, y2, ...]
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     */
+    public static void polygonOutline(long vg, float[] points, float strokeWidth, VGColor color) {
+        if (vg == 0 || color == null || points == null || points.length < 6) return;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, points[0], points[1]);
+        for (int i = 2; i < points.length - 1; i += 2) {
+            nvgLineTo(vg, points[i], points[i + 1]);
+        }
+        nvgClosePath(vg);
+        stroke(vg, strokeWidth, color);
+    }
+
+    /**
+     * Draws a soft drop shadow around a rounded rectangle.
      *
      * @param vg          NanoVG context handle
      * @param x           box left edge
@@ -349,8 +517,7 @@ public final class VGDraw {
     }
 
     /**
-     * Draws a layered glow around a rounded rectangle. Outer layers are drawn
-     * first and fade as they grow.
+     * Draws a layered glow around a rounded rectangle.
      *
      * @param vg         NanoVG context handle
      * @param x          box left edge
@@ -358,7 +525,7 @@ public final class VGDraw {
      * @param w          box width
      * @param h          box height
      * @param radius     box corner radius
-     * @param color      glow color; its alpha scales the overall intensity
+     * @param color      glow color
      * @param layers     number of layers to draw
      * @param spreadStep distance between consecutive layers
      */
@@ -391,16 +558,16 @@ public final class VGDraw {
     }
 
     /**
-     * Draws a single line of text.
+     * Draws a single line of text with custom alignment.
      *
      * @param vg    NanoVG context handle
      * @param text  text to draw
      * @param x     anchor x
      * @param y     anchor y
-     * @param font  registered font face name, or {@code null} to keep the current face
+     * @param font  registered font face name, or {@code null}
      * @param size  font size in pixels
      * @param color text color
-     * @param align combination of NanoVG {@code NVG_ALIGN_*} flags
+     * @param align NanoVG alignment flags
      */
     public static void text(long vg, String text, float x, float y, String font, float size,
                             VGColor color, int align) {
@@ -412,13 +579,13 @@ public final class VGDraw {
     }
 
     /**
-     * Draws a single line of text aligned to {@link #DEFAULT_TEXT_ALIGN}.
+     * Draws a single line of text with default top-left alignment.
      *
      * @param vg    NanoVG context handle
      * @param text  text to draw
      * @param x     left edge
      * @param y     top edge
-     * @param font  registered font face name, or {@code null} to keep the current face
+     * @param font  registered font face name, or {@code null}
      * @param size  font size in pixels
      * @param color text color
      */
@@ -427,13 +594,127 @@ public final class VGDraw {
     }
 
     /**
-     * Measures the horizontal advance of a line of text.
+     * Draws a single line of text using a {@link VGFont} with custom alignment.
+     *
+     * @param vg    NanoVG context handle
+     * @param text  text to draw
+     * @param x     anchor x
+     * @param y     anchor y
+     * @param font  registered font handle
+     * @param size  font size in pixels
+     * @param color text color
+     * @param align NanoVG alignment flags
+     */
+    public static void text(long vg, String text, float x, float y, VGFont font, float size,
+                            VGColor color, int align) {
+        if (vg == 0 || color == null || isEmpty(text)) return;
+        applyFont(vg, font, size);
+        nvgTextAlign(vg, align);
+        nvgFillColor(vg, color.nvg());
+        nvgText(vg, x, y, text);
+    }
+
+    /**
+     * Draws a single line of text using a {@link VGFont} with default alignment.
+     *
+     * @param vg    NanoVG context handle
+     * @param text  text to draw
+     * @param x     left edge
+     * @param y     top edge
+     * @param font  registered font handle
+     * @param size  font size in pixels
+     * @param color text color
+     */
+    public static void text(long vg, String text, float x, float y, VGFont font, float size, VGColor color) {
+        text(vg, text, x, y, font, size, color, DEFAULT_TEXT_ALIGN);
+    }
+
+    /**
+     * Draws multi-line wrapped text inside a bounding column width with custom alignment.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to draw
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width before wrapping
+     * @param font          registered font face name, or {@code null}
+     * @param size          font size in pixels
+     * @param color         text color
+     * @param align         alignment flags
+     */
+    public static void textBox(long vg, String text, float x, float y, float breakRowWidth,
+                               String font, float size, VGColor color, int align) {
+        if (vg == 0 || color == null || isEmpty(text)) return;
+        applyFont(vg, font, size);
+        nvgTextAlign(vg, align);
+        nvgFillColor(vg, color.nvg());
+        nvgTextBox(vg, x, y, breakRowWidth, text);
+    }
+
+    /**
+     * Draws multi-line wrapped text inside a bounding column width with default alignment.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to draw
+     * @param x             left edge
+     * @param y             top edge
+     * @param breakRowWidth maximum line width before wrapping
+     * @param font          registered font face name, or {@code null}
+     * @param size          font size in pixels
+     * @param color         text color
+     */
+    public static void textBox(long vg, String text, float x, float y, float breakRowWidth,
+                               String font, float size, VGColor color) {
+        textBox(vg, text, x, y, breakRowWidth, font, size, color, DEFAULT_TEXT_ALIGN);
+    }
+
+    /**
+     * Draws multi-line wrapped text using a {@link VGFont} with custom alignment.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to draw
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width before wrapping
+     * @param font          registered font handle
+     * @param size          font size in pixels
+     * @param color         text color
+     * @param align         alignment flags
+     */
+    public static void textBox(long vg, String text, float x, float y, float breakRowWidth,
+                               VGFont font, float size, VGColor color, int align) {
+        if (vg == 0 || color == null || isEmpty(text)) return;
+        applyFont(vg, font, size);
+        nvgTextAlign(vg, align);
+        nvgFillColor(vg, color.nvg());
+        nvgTextBox(vg, x, y, breakRowWidth, text);
+    }
+
+    /**
+     * Draws multi-line wrapped text using a {@link VGFont} with default alignment.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to draw
+     * @param x             left edge
+     * @param y             top edge
+     * @param breakRowWidth maximum line width before wrapping
+     * @param font          registered font handle
+     * @param size          font size in pixels
+     * @param color         text color
+     */
+    public static void textBox(long vg, String text, float x, float y, float breakRowWidth,
+                               VGFont font, float size, VGColor color) {
+        textBox(vg, text, x, y, breakRowWidth, font, size, color, DEFAULT_TEXT_ALIGN);
+    }
+
+    /**
+     * Measures the advance width of a line of text.
      *
      * @param vg   NanoVG context handle
      * @param text text to measure
-     * @param font registered font face name, or {@code null} to keep the current face
+     * @param font registered font face name
      * @param size font size in pixels
-     * @return the advance width, or {@code 0} if nothing can be measured
+     * @return advance width
      */
     public static float textWidth(long vg, String text, String font, float size) {
         if (vg == 0 || isEmpty(text)) return 0.0f;
@@ -442,14 +723,29 @@ public final class VGDraw {
     }
 
     /**
-     * Measures the bounding box of a line of text drawn at the origin.
+     * Measures the advance width of a line of text using a {@link VGFont}.
+     *
+     * @param vg   NanoVG context handle
+     * @param text text to measure
+     * @param font registered font handle
+     * @param size font size in pixels
+     * @return advance width
+     */
+    public static float textWidth(long vg, String text, VGFont font, float size) {
+        if (vg == 0 || isEmpty(text)) return 0.0f;
+        applyFont(vg, font, size);
+        return nvgTextBounds(vg, 0.0f, 0.0f, text, (FloatBuffer) null);
+    }
+
+    /**
+     * Measures the bounding box of a single line of text drawn at the origin.
      *
      * @param vg        NanoVG context handle
      * @param text      text to measure
-     * @param font      registered font face name, or {@code null} to keep the current face
+     * @param font      registered font face name
      * @param size      font size in pixels
-     * @param outBounds destination array of at least 4 elements, or {@code null} to allocate one
-     * @return array holding {@code [minX, minY, maxX, maxY]}; zeroed if nothing can be measured
+     * @param outBounds destination array [minX, minY, maxX, maxY], or {@code null}
+     * @return bounds array
      */
     public static float[] textBounds(long vg, String text, String font, float size, float[] outBounds) {
         float[] target = (outBounds != null && outBounds.length >= 4) ? outBounds : new float[4];
@@ -460,6 +756,385 @@ public final class VGDraw {
         applyFont(vg, font, size);
         nvgTextBounds(vg, 0.0f, 0.0f, text, target);
         return target;
+    }
+
+    /**
+     * Measures the bounding box of a single line of text using a {@link VGFont}.
+     *
+     * @param vg        NanoVG context handle
+     * @param text      text to measure
+     * @param font      registered font handle
+     * @param size      font size in pixels
+     * @param outBounds destination array [minX, minY, maxX, maxY], or {@code null}
+     * @return bounds array
+     */
+    public static float[] textBounds(long vg, String text, VGFont font, float size, float[] outBounds) {
+        float[] target = (outBounds != null && outBounds.length >= 4) ? outBounds : new float[4];
+        if (vg == 0 || isEmpty(text)) {
+            target[0] = target[1] = target[2] = target[3] = 0.0f;
+            return target;
+        }
+        applyFont(vg, font, size);
+        nvgTextBounds(vg, 0.0f, 0.0f, text, target);
+        return target;
+    }
+
+    /**
+     * Measures the bounding box of multi-line wrapped text.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to measure
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          registered font face name
+     * @param size          font size in pixels
+     * @param outBounds     destination array [minX, minY, maxX, maxY], or {@code null}
+     * @return bounds array
+     */
+    public static float[] textBoxBounds(long vg, String text, float x, float y, float breakRowWidth,
+                                        String font, float size, float[] outBounds) {
+        float[] target = (outBounds != null && outBounds.length >= 4) ? outBounds : new float[4];
+        if (vg == 0 || isEmpty(text)) {
+            target[0] = target[1] = target[2] = target[3] = 0.0f;
+            return target;
+        }
+        applyFont(vg, font, size);
+        nvgTextBoxBounds(vg, x, y, breakRowWidth, text, target);
+        return target;
+    }
+
+    /**
+     * Measures the bounding box of multi-line wrapped text using a {@link VGFont}.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to measure
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          registered font handle
+     * @param size          font size in pixels
+     * @param outBounds     destination array [minX, minY, maxX, maxY], or {@code null}
+     * @return bounds array
+     */
+    public static float[] textBoxBounds(long vg, String text, float x, float y, float breakRowWidth,
+                                        VGFont font, float size, float[] outBounds) {
+        float[] target = (outBounds != null && outBounds.length >= 4) ? outBounds : new float[4];
+        if (vg == 0 || isEmpty(text)) {
+            target[0] = target[1] = target[2] = target[3] = 0.0f;
+            return target;
+        }
+        applyFont(vg, font, size);
+        nvgTextBoxBounds(vg, x, y, breakRowWidth, text, target);
+        return target;
+    }
+
+    /**
+     * Computes the total rendered height of multi-line wrapped text without per-frame allocations.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to measure
+     * @param breakRowWidth maximum line width
+     * @param font          registered font face name
+     * @param size          font size in pixels
+     * @return total height in pixels
+     */
+    public static float textBoxHeight(long vg, String text, float breakRowWidth, String font, float size) {
+        if (vg == 0 || isEmpty(text)) return 0.0f;
+        float[] bounds = textBoxBounds(vg, text, 0.0f, 0.0f, breakRowWidth, font, size, SCRATCH_BOUNDS.get());
+        return bounds[3] - bounds[1];
+    }
+
+    /**
+     * Computes the total rendered height of multi-line wrapped text using a {@link VGFont}.
+     *
+     * @param vg            NanoVG context handle
+     * @param text          text to measure
+     * @param breakRowWidth maximum line width
+     * @param font          registered font handle
+     * @param size          font size in pixels
+     * @return total height in pixels
+     */
+    public static float textBoxHeight(long vg, String text, float breakRowWidth, VGFont font, float size) {
+        if (vg == 0 || isEmpty(text)) return 0.0f;
+        float[] bounds = textBoxBounds(vg, text, 0.0f, 0.0f, breakRowWidth, font, size, SCRATCH_BOUNDS.get());
+        return bounds[3] - bounds[1];
+    }
+
+    /**
+     * Sets the text line height multiplier.
+     *
+     * @param vg         NanoVG context handle
+     * @param lineHeight line height multiplier (default 1.0)
+     */
+    public static void textLineHeight(long vg, float lineHeight) {
+        if (vg != 0) nvgTextLineHeight(vg, lineHeight);
+    }
+
+    /**
+     * Sets the text letter spacing in pixels.
+     *
+     * @param vg      NanoVG context handle
+     * @param spacing spacing in pixels
+     */
+    public static void textLetterSpacing(long vg, float spacing) {
+        if (vg != 0) nvgTextLetterSpacing(vg, spacing);
+    }
+
+    /**
+     * Sets the line cap style for subsequent stroke operations.
+     *
+     * @param vg  NanoVG context handle
+     * @param cap native NanoVG line cap constant
+     */
+    public static void lineCap(long vg, int cap) {
+        if (vg != 0) nvgLineCap(vg, cap);
+    }
+
+    /**
+     * Sets the line cap style for subsequent stroke operations.
+     *
+     * @param vg  NanoVG context handle
+     * @param cap line cap enum
+     */
+    public static void lineCap(long vg, VGLineCap cap) {
+        if (vg != 0 && cap != null) nvgLineCap(vg, cap.id);
+    }
+
+    /**
+     * Sets the line join style for subsequent stroke operations.
+     *
+     * @param vg   NanoVG context handle
+     * @param join native NanoVG line join constant
+     */
+    public static void lineJoin(long vg, int join) {
+        if (vg != 0) nvgLineJoin(vg, join);
+    }
+
+    /**
+     * Sets the line join style for subsequent stroke operations.
+     *
+     * @param vg   NanoVG context handle
+     * @param join line join enum
+     */
+    public static void lineJoin(long vg, VGLineJoin join) {
+        if (vg != 0 && join != null) nvgLineJoin(vg, join.id);
+    }
+
+    /**
+     * Sets the miter limit for sharp corners.
+     *
+     * @param vg    NanoVG context handle
+     * @param limit miter limit ratio
+     */
+    public static void miterLimit(long vg, float limit) {
+        if (vg != 0) nvgMiterLimit(vg, limit);
+    }
+
+    /**
+     * Sets the global alpha factor multiplied into all drawing operations.
+     *
+     * @param vg    NanoVG context handle
+     * @param alpha alpha in [0, 1]
+     */
+    public static void globalAlpha(long vg, float alpha) {
+        if (vg != 0) nvgGlobalAlpha(vg, alpha);
+    }
+
+    /**
+     * Sets the global composite operation for pixel blending.
+     *
+     * @param vg NanoVG context handle
+     * @param op native composite operation constant
+     */
+    public static void compositeOperation(long vg, int op) {
+        if (vg != 0) nvgGlobalCompositeOperation(vg, op);
+    }
+
+    /**
+     * Sets the global composite operation for pixel blending.
+     *
+     * @param vg NanoVG context handle
+     * @param op composite operation enum
+     */
+    public static void compositeOperation(long vg, VGCompositeOp op) {
+        if (vg != 0 && op != null) nvgGlobalCompositeOperation(vg, op.id);
+    }
+
+    /**
+     * Sets the global composite blend function factors.
+     *
+     * @param vg      NanoVG context handle
+     * @param sfactor source factor
+     * @param dfactor destination factor
+     */
+    public static void compositeBlendFunc(long vg, int sfactor, int dfactor) {
+        if (vg != 0) nvgGlobalCompositeBlendFunc(vg, sfactor, dfactor);
+    }
+
+    /**
+     * Sets the global composite blend function factors using enums.
+     *
+     * @param vg      NanoVG context handle
+     * @param sfactor source blend factor
+     * @param dfactor destination blend factor
+     */
+    public static void compositeBlendFunc(long vg, VGBlendFactor sfactor, VGBlendFactor dfactor) {
+        if (vg != 0 && sfactor != null && dfactor != null) {
+            nvgGlobalCompositeBlendFunc(vg, sfactor.id, dfactor.id);
+        }
+    }
+
+    /**
+     * Sets separate blend function factors for color (RGB) and alpha channels.
+     *
+     * @param vg       NanoVG context handle
+     * @param srcRGB   source RGB factor
+     * @param dstRGB   destination RGB factor
+     * @param srcAlpha source alpha factor
+     * @param dstAlpha destination alpha factor
+     */
+    public static void compositeBlendFuncSeparate(long vg, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
+        if (vg != 0) nvgGlobalCompositeBlendFuncSeparate(vg, srcRGB, dstRGB, srcAlpha, dstAlpha);
+    }
+
+    /**
+     * Sets separate blend function factors for color (RGB) and alpha channels using enums.
+     *
+     * @param vg       NanoVG context handle
+     * @param srcRGB   source RGB factor
+     * @param dstRGB   destination RGB factor
+     * @param srcAlpha source alpha factor
+     * @param dstAlpha destination alpha factor
+     */
+    public static void compositeBlendFuncSeparate(long vg, VGBlendFactor srcRGB, VGBlendFactor dstRGB,
+                                                  VGBlendFactor srcAlpha, VGBlendFactor dstAlpha) {
+        if (vg != 0 && srcRGB != null && dstRGB != null && srcAlpha != null && dstAlpha != null) {
+            nvgGlobalCompositeBlendFuncSeparate(vg, srcRGB.id, dstRGB.id, srcAlpha.id, dstAlpha.id);
+        }
+    }
+
+    /**
+     * Deletes a texture image on the GPU.
+     *
+     * @param vg    NanoVG context handle
+     * @param image native image handle
+     */
+    public static void deleteImage(long vg, int image) {
+        if (vg != 0 && image > 0) nvgDeleteImage(vg, image);
+    }
+
+    /**
+     * Deletes a texture image on the GPU using a {@link VGImage}.
+     *
+     * @param vg    NanoVG context handle
+     * @param image image instance
+     */
+    public static void deleteImage(long vg, VGImage image) {
+        if (image != null) image.delete();
+    }
+
+    /**
+     * Queries the dimensions of an image handle.
+     *
+     * @param vg      NanoVG context handle
+     * @param image   image handle
+     * @param outSize destination array [width, height], or {@code null}
+     * @return array holding [width, height]
+     */
+    public static int[] imageSize(long vg, int image, int[] outSize) {
+        int[] target = (outSize != null && outSize.length >= 2) ? outSize : new int[2];
+        if (vg == 0 || image <= 0) {
+            target[0] = target[1] = 0;
+            return target;
+        }
+        int[] w = new int[1];
+        int[] h = new int[1];
+        nvgImageSize(vg, image, w, h);
+        target[0] = w[0];
+        target[1] = h[0];
+        return target;
+    }
+
+    /**
+     * Queries the dimensions of an image handle without heap allocation using a scratch buffer.
+     *
+     * @param vg    NanoVG context handle
+     * @param image image handle
+     * @return array holding [width, height]
+     */
+    public static int[] imageSize(long vg, int image) {
+        return imageSize(vg, image, SCRATCH_SIZE.get());
+    }
+
+    /**
+     * Draws an image into a rectangle with optional rounded corners and opacity.
+     *
+     * @param vg     NanoVG context handle
+     * @param image  native image handle
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param radius corner radius (0 for sharp rectangle)
+     * @param alpha  opacity in [0, 1]
+     */
+    public static void image(long vg, int image, float x, float y, float w, float h, float radius, float alpha) {
+        if (vg == 0 || image <= 0) return;
+        VGPaint paint = VGPaint.imagePattern(vg, x, y, w, h, 0.0f, image, alpha);
+        if (radius > 0.0f) {
+            roundedRect(vg, x, y, w, h, radius, paint);
+        } else {
+            rect(vg, x, y, w, h, paint);
+        }
+    }
+
+    /**
+     * Draws an opaque, unrounded image rectangle.
+     *
+     * @param vg    NanoVG context handle
+     * @param image native image handle
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     */
+    public static void image(long vg, int image, float x, float y, float w, float h) {
+        image(vg, image, x, y, w, h, 0.0f, 1.0f);
+    }
+
+    /**
+     * Draws an image into a rectangle with optional rounded corners and opacity.
+     *
+     * @param vg     NanoVG context handle
+     * @param image  image instance
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param radius corner radius
+     * @param alpha  opacity in [0, 1]
+     */
+    public static void image(long vg, VGImage image, float x, float y, float w, float h, float radius, float alpha) {
+        if (image != null) {
+            image(vg, image.handle(), x, y, w, h, radius, alpha);
+        }
+    }
+
+    /**
+     * Draws an opaque, unrounded image rectangle using a {@link VGImage}.
+     *
+     * @param vg    NanoVG context handle
+     * @param image image instance
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     */
+    public static void image(long vg, VGImage image, float x, float y, float w, float h) {
+        if (image != null) {
+            image(vg, image.handle(), x, y, w, h, 0.0f, 1.0f);
+        }
     }
 
     /**
@@ -566,6 +1241,13 @@ public final class VGDraw {
     private static void applyFont(long vg, String font, float size) {
         if (font != null) {
             nvgFontFace(vg, font);
+        }
+        nvgFontSize(vg, size);
+    }
+
+    private static void applyFont(long vg, VGFont font, float size) {
+        if (font != null) {
+            nvgFontFaceId(vg, font.handle());
         }
         nvgFontSize(vg, size);
     }

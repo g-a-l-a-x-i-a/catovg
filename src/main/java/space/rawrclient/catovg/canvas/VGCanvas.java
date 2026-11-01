@@ -1,8 +1,18 @@
 package space.rawrclient.catovg.canvas;
 
 import space.rawrclient.catovg.color.VGColor;
+import space.rawrclient.catovg.composite.VGBlendFactor;
+import space.rawrclient.catovg.composite.VGCompositeOp;
 import space.rawrclient.catovg.draw.VGDraw;
+import space.rawrclient.catovg.font.VGFont;
+import space.rawrclient.catovg.image.VGImage;
 import space.rawrclient.catovg.paint.VGPaint;
+import space.rawrclient.catovg.stroke.VGLineCap;
+import space.rawrclient.catovg.stroke.VGLineJoin;
+
+import java.io.InputStream;
+
+import static org.lwjgl.nanovg.NanoVG.*;
 
 /**
  * Fluent, object-oriented wrapper around a NanoVG context handle.
@@ -165,7 +175,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a rectangle.
+     * Fills a rectangle with a paint.
      *
      * @param x     left edge
      * @param y     top edge
@@ -215,7 +225,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a rounded rectangle.
+     * Fills a rounded rectangle with a paint.
      *
      * @param x      left edge
      * @param y      top edge
@@ -251,7 +261,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a rounded rectangle with per-corner radii.
+     * Fills a rounded rectangle with varying corner radii.
      *
      * @param x              left edge
      * @param y              top edge
@@ -273,7 +283,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a rounded rectangle with per-corner radii.
+     * Fills a rounded rectangle with varying corner radii and paint.
      *
      * @param x              left edge
      * @param y              top edge
@@ -295,7 +305,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a circle.
+     * Fills a circle with color.
      *
      * @param cx     center x
      * @param cy     center y
@@ -310,7 +320,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Fills a circle.
+     * Fills a circle with paint.
      *
      * @param cx     center x
      * @param cy     center y
@@ -374,6 +384,24 @@ public final class VGCanvas {
     }
 
     /**
+     * Strokes a line segment with a custom line cap.
+     *
+     * @param x1          start x
+     * @param y1          start y
+     * @param x2          end x
+     * @param y2          end y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @param cap         line cap
+     * @return this canvas
+     * @see VGDraw#line(long, float, float, float, float, float, VGColor, VGLineCap)
+     */
+    public VGCanvas line(float x1, float y1, float x2, float y2, float strokeWidth, VGColor color, VGLineCap cap) {
+        VGDraw.line(vg, x1, y1, x2, y2, strokeWidth, color, cap);
+        return this;
+    }
+
+    /**
      * Strokes a circular arc.
      *
      * @param cx          center x
@@ -381,7 +409,7 @@ public final class VGCanvas {
      * @param radius      radius
      * @param a0          start angle in radians
      * @param a1          end angle in radians
-     * @param dir         winding direction
+     * @param dir         direction
      * @param strokeWidth stroke width
      * @param color       stroke color
      * @return this canvas
@@ -396,14 +424,14 @@ public final class VGCanvas {
     /**
      * Fills a quadrilateral.
      *
-     * @param x1    first vertex x
-     * @param y1    first vertex y
-     * @param x2    second vertex x
-     * @param y2    second vertex y
-     * @param x3    third vertex x
-     * @param y3    third vertex y
-     * @param x4    fourth vertex x
-     * @param y4    fourth vertex y
+     * @param x1    vertex 1 x
+     * @param y1    vertex 1 y
+     * @param x2    vertex 2 x
+     * @param y2    vertex 2 y
+     * @param x3    vertex 3 x
+     * @param y3    vertex 3 y
+     * @param x4    vertex 4 x
+     * @param y4    vertex 4 y
      * @param color fill color
      * @return this canvas
      * @see VGDraw#quad(long, float, float, float, float, float, float, float, float, VGColor)
@@ -415,7 +443,422 @@ public final class VGCanvas {
     }
 
     /**
-     * Draws a drop shadow around a rounded rectangle.
+     * Strokes a cubic bezier curve.
+     *
+     * @param sx          start x
+     * @param sy          start y
+     * @param c1x         control 1 x
+     * @param c1y         control 1 y
+     * @param c2x         control 2 x
+     * @param c2y         control 2 y
+     * @param ex          end x
+     * @param ey          end y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#bezier(long, float, float, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas bezier(float sx, float sy, float c1x, float c1y, float c2x, float c2y,
+                          float ex, float ey, float strokeWidth, VGColor color) {
+        VGDraw.bezier(vg, sx, sy, c1x, c1y, c2x, c2y, ex, ey, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a quadratic curve.
+     *
+     * @param sx          start x
+     * @param sy          start y
+     * @param cx          control x
+     * @param cy          control y
+     * @param ex          end x
+     * @param ey          end y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#quadCurve(long, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas quadCurve(float sx, float sy, float cx, float cy,
+                             float ex, float ey, float strokeWidth, VGColor color) {
+        VGDraw.quadCurve(vg, sx, sy, cx, cy, ex, ey, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a polyline.
+     *
+     * @param points      flat array of point coordinates
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#polyline(long, float[], float, VGColor)
+     */
+    public VGCanvas polyline(float[] points, float strokeWidth, VGColor color) {
+        VGDraw.polyline(vg, points, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a polyline with line cap and join styling.
+     *
+     * @param points      flat array of point coordinates
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @param cap         line cap
+     * @param join        line join
+     * @return this canvas
+     * @see VGDraw#polyline(long, float[], float, VGColor, VGLineCap, VGLineJoin)
+     */
+    public VGCanvas polyline(float[] points, float strokeWidth, VGColor color,
+                             VGLineCap cap, VGLineJoin join) {
+        VGDraw.polyline(vg, points, strokeWidth, color, cap, join);
+        return this;
+    }
+
+    /**
+     * Fills a polygon with color.
+     *
+     * @param points flat array of point coordinates
+     * @param color  fill color
+     * @return this canvas
+     * @see VGDraw#polygon(long, float[], VGColor)
+     */
+    public VGCanvas polygon(float[] points, VGColor color) {
+        VGDraw.polygon(vg, points, color);
+        return this;
+    }
+
+    /**
+     * Fills a polygon with paint.
+     *
+     * @param points flat array of point coordinates
+     * @param paint  fill paint
+     * @return this canvas
+     * @see VGDraw#polygon(long, float[], VGPaint)
+     */
+    public VGCanvas polygon(float[] points, VGPaint paint) {
+        VGDraw.polygon(vg, points, paint);
+        return this;
+    }
+
+    /**
+     * Strokes a polygon outline.
+     *
+     * @param points      flat array of point coordinates
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#polygonOutline(long, float[], float, VGColor)
+     */
+    public VGCanvas polygonOutline(float[] points, float strokeWidth, VGColor color) {
+        VGDraw.polygonOutline(vg, points, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Begins a new path in NanoVG.
+     *
+     * @return this canvas
+     */
+    public VGCanvas beginPath() {
+        if (vg != 0) nvgBeginPath(vg);
+        return this;
+    }
+
+    /**
+     * Closes the current path sub-contour.
+     *
+     * @return this canvas
+     */
+    public VGCanvas closePath() {
+        if (vg != 0) nvgClosePath(vg);
+        return this;
+    }
+
+    /**
+     * Moves path pen to position (x, y).
+     *
+     * @param x destination x
+     * @param y destination y
+     * @return this canvas
+     */
+    public VGCanvas moveTo(float x, float y) {
+        if (vg != 0) nvgMoveTo(vg, x, y);
+        return this;
+    }
+
+    /**
+     * Draws a line segment to position (x, y).
+     *
+     * @param x destination x
+     * @param y destination y
+     * @return this canvas
+     */
+    public VGCanvas lineTo(float x, float y) {
+        if (vg != 0) nvgLineTo(vg, x, y);
+        return this;
+    }
+
+    /**
+     * Draws a cubic bezier segment to position (x, y).
+     *
+     * @param c1x control 1 x
+     * @param c1y control 1 y
+     * @param c2x control 2 x
+     * @param c2y control 2 y
+     * @param x   destination x
+     * @param y   destination y
+     * @return this canvas
+     */
+    public VGCanvas bezierTo(float c1x, float c1y, float c2x, float c2y, float x, float y) {
+        if (vg != 0) nvgBezierTo(vg, c1x, c1y, c2x, c2y, x, y);
+        return this;
+    }
+
+    /**
+     * Draws a quadratic curve segment to position (x, y).
+     *
+     * @param cx control point x
+     * @param cy control point y
+     * @param x  destination x
+     * @param y  destination y
+     * @return this canvas
+     */
+    public VGCanvas quadTo(float cx, float cy, float x, float y) {
+        if (vg != 0) nvgQuadTo(vg, cx, cy, x, y);
+        return this;
+    }
+
+    /**
+     * Draws an arc segment between two tangent lines with a radius.
+     *
+     * @param x1     first tangent point x
+     * @param y1     first tangent point y
+     * @param x2     second tangent point x
+     * @param y2     second tangent point y
+     * @param radius arc radius
+     * @return this canvas
+     */
+    public VGCanvas arcTo(float x1, float y1, float x2, float y2, float radius) {
+        if (vg != 0) nvgArcTo(vg, x1, y1, x2, y2, radius);
+        return this;
+    }
+
+    /**
+     * Fills the active path with a solid color.
+     *
+     * @param color fill color
+     * @return this canvas
+     */
+    public VGCanvas fill(VGColor color) {
+        if (vg != 0 && color != null) {
+            nvgFillColor(vg, color.nvg());
+            nvgFill(vg);
+        }
+        return this;
+    }
+
+    /**
+     * Fills the active path with a paint.
+     *
+     * @param paint fill paint
+     * @return this canvas
+     */
+    public VGCanvas fill(VGPaint paint) {
+        if (vg != 0 && paint != null) {
+            nvgFillPaint(vg, paint.nvg());
+            nvgFill(vg);
+        }
+        return this;
+    }
+
+    /**
+     * Strokes the active path with a solid color.
+     *
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     */
+    public VGCanvas stroke(float strokeWidth, VGColor color) {
+        if (vg != 0 && color != null) {
+            nvgStrokeColor(vg, color.nvg());
+            nvgStrokeWidth(vg, strokeWidth);
+            nvgStroke(vg);
+        }
+        return this;
+    }
+
+    /**
+     * Strokes the active path with a paint.
+     *
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     */
+    public VGCanvas stroke(float strokeWidth, VGPaint paint) {
+        if (vg != 0 && paint != null) {
+            nvgStrokePaint(vg, paint.nvg());
+            nvgStrokeWidth(vg, strokeWidth);
+            nvgStroke(vg);
+        }
+        return this;
+    }
+
+    /**
+     * Sets the line cap style.
+     *
+     * @param cap native NanoVG line cap constant
+     * @return this canvas
+     * @see VGDraw#lineCap(long, int)
+     */
+    public VGCanvas lineCap(int cap) {
+        VGDraw.lineCap(vg, cap);
+        return this;
+    }
+
+    /**
+     * Sets the line cap style using a {@link VGLineCap}.
+     *
+     * @param cap line cap enum
+     * @return this canvas
+     * @see VGDraw#lineCap(long, VGLineCap)
+     */
+    public VGCanvas lineCap(VGLineCap cap) {
+        VGDraw.lineCap(vg, cap);
+        return this;
+    }
+
+    /**
+     * Sets the line join style.
+     *
+     * @param join native NanoVG line join constant
+     * @return this canvas
+     * @see VGDraw#lineJoin(long, int)
+     */
+    public VGCanvas lineJoin(int join) {
+        VGDraw.lineJoin(vg, join);
+        return this;
+    }
+
+    /**
+     * Sets the line join style using a {@link VGLineJoin}.
+     *
+     * @param join line join enum
+     * @return this canvas
+     * @see VGDraw#lineJoin(long, VGLineJoin)
+     */
+    public VGCanvas lineJoin(VGLineJoin join) {
+        VGDraw.lineJoin(vg, join);
+        return this;
+    }
+
+    /**
+     * Sets the miter limit.
+     *
+     * @param limit miter limit ratio
+     * @return this canvas
+     * @see VGDraw#miterLimit(long, float)
+     */
+    public VGCanvas miterLimit(float limit) {
+        VGDraw.miterLimit(vg, limit);
+        return this;
+    }
+
+    /**
+     * Sets the global alpha factor.
+     *
+     * @param alpha alpha in [0, 1]
+     * @return this canvas
+     * @see VGDraw#globalAlpha(long, float)
+     */
+    public VGCanvas globalAlpha(float alpha) {
+        VGDraw.globalAlpha(vg, alpha);
+        return this;
+    }
+
+    /**
+     * Sets the global composite operation.
+     *
+     * @param op native composite operation constant
+     * @return this canvas
+     * @see VGDraw#compositeOperation(long, int)
+     */
+    public VGCanvas compositeOperation(int op) {
+        VGDraw.compositeOperation(vg, op);
+        return this;
+    }
+
+    /**
+     * Sets the global composite operation using a {@link VGCompositeOp}.
+     *
+     * @param op composite operation enum
+     * @return this canvas
+     * @see VGDraw#compositeOperation(long, VGCompositeOp)
+     */
+    public VGCanvas compositeOperation(VGCompositeOp op) {
+        VGDraw.compositeOperation(vg, op);
+        return this;
+    }
+
+    /**
+     * Sets the global composite blend function.
+     *
+     * @param sfactor source factor
+     * @param dfactor destination factor
+     * @return this canvas
+     * @see VGDraw#compositeBlendFunc(long, int, int)
+     */
+    public VGCanvas compositeBlendFunc(int sfactor, int dfactor) {
+        VGDraw.compositeBlendFunc(vg, sfactor, dfactor);
+        return this;
+    }
+
+    /**
+     * Sets the global composite blend function using {@link VGBlendFactor}.
+     *
+     * @param sfactor source factor
+     * @param dfactor destination factor
+     * @return this canvas
+     * @see VGDraw#compositeBlendFunc(long, VGBlendFactor, VGBlendFactor)
+     */
+    public VGCanvas compositeBlendFunc(VGBlendFactor sfactor, VGBlendFactor dfactor) {
+        VGDraw.compositeBlendFunc(vg, sfactor, dfactor);
+        return this;
+    }
+
+    /**
+     * Sets separate blend function factors for RGB and alpha channels.
+     *
+     * @param srcRGB   source RGB factor
+     * @param dstRGB   destination RGB factor
+     * @param srcAlpha source alpha factor
+     * @param dstAlpha destination alpha factor
+     * @return this canvas
+     * @see VGDraw#compositeBlendFuncSeparate(long, int, int, int, int)
+     */
+    public VGCanvas compositeBlendFuncSeparate(int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
+        VGDraw.compositeBlendFuncSeparate(vg, srcRGB, dstRGB, srcAlpha, dstAlpha);
+        return this;
+    }
+
+    /**
+     * Sets separate blend function factors for RGB and alpha channels using enums.
+     *
+     * @param srcRGB   source RGB factor
+     * @param dstRGB   destination RGB factor
+     * @param srcAlpha source alpha factor
+     * @param dstAlpha destination alpha factor
+     * @return this canvas
+     * @see VGDraw#compositeBlendFuncSeparate(long, VGBlendFactor, VGBlendFactor, VGBlendFactor, VGBlendFactor)
+     */
+    public VGCanvas compositeBlendFuncSeparate(VGBlendFactor srcRGB, VGBlendFactor dstRGB,
+                                              VGBlendFactor srcAlpha, VGBlendFactor dstAlpha) {
+        VGDraw.compositeBlendFuncSeparate(vg, srcRGB, dstRGB, srcAlpha, dstAlpha);
+        return this;
+    }
+
+    /**
+     * Draws a drop shadow.
      *
      * @param x           box left edge
      * @param y           box top edge
@@ -455,7 +898,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Draws a layered glow around a rounded rectangle.
+     * Draws a subtle 2 layer glow around a rounded rectangle.
      *
      * @param x      box left edge
      * @param y      box top edge
@@ -490,7 +933,7 @@ public final class VGCanvas {
     }
 
     /**
-     * Draws a line of text.
+     * Draws a line of text with default alignment.
      *
      * @param text  text to draw
      * @param x     left edge
@@ -503,6 +946,119 @@ public final class VGCanvas {
      */
     public VGCanvas text(String text, float x, float y, String font, float size, VGColor color) {
         VGDraw.text(vg, text, x, y, font, size, color);
+        return this;
+    }
+
+    /**
+     * Draws a line of text using a {@link VGFont}.
+     *
+     * @param text  text to draw
+     * @param x     anchor x
+     * @param y     anchor y
+     * @param font  font handle
+     * @param size  font size in pixels
+     * @param color text color
+     * @param align alignment flags
+     * @return this canvas
+     * @see VGDraw#text(long, String, float, float, VGFont, float, VGColor, int)
+     */
+    public VGCanvas text(String text, float x, float y, VGFont font, float size, VGColor color, int align) {
+        VGDraw.text(vg, text, x, y, font, size, color, align);
+        return this;
+    }
+
+    /**
+     * Draws a line of text using a {@link VGFont} with default alignment.
+     *
+     * @param text  text to draw
+     * @param x     left edge
+     * @param y     top edge
+     * @param font  font handle
+     * @param size  font size in pixels
+     * @param color text color
+     * @return this canvas
+     * @see VGDraw#text(long, String, float, float, VGFont, float, VGColor)
+     */
+    public VGCanvas text(String text, float x, float y, VGFont font, float size, VGColor color) {
+        VGDraw.text(vg, text, x, y, font, size, color);
+        return this;
+    }
+
+    /**
+     * Draws multi-line wrapped text inside a bounding column width.
+     *
+     * @param text          text to draw
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          font face name
+     * @param size          font size in pixels
+     * @param color         text color
+     * @param align         alignment flags
+     * @return this canvas
+     * @see VGDraw#textBox(long, String, float, float, float, String, float, VGColor, int)
+     */
+    public VGCanvas textBox(String text, float x, float y, float breakRowWidth,
+                            String font, float size, VGColor color, int align) {
+        VGDraw.textBox(vg, text, x, y, breakRowWidth, font, size, color, align);
+        return this;
+    }
+
+    /**
+     * Draws multi-line wrapped text inside a bounding column width with default alignment.
+     *
+     * @param text          text to draw
+     * @param x             left edge
+     * @param y             top edge
+     * @param breakRowWidth maximum line width
+     * @param font          font face name
+     * @param size          font size in pixels
+     * @param color         text color
+     * @return this canvas
+     * @see VGDraw#textBox(long, String, float, float, float, String, float, VGColor)
+     */
+    public VGCanvas textBox(String text, float x, float y, float breakRowWidth,
+                            String font, float size, VGColor color) {
+        VGDraw.textBox(vg, text, x, y, breakRowWidth, font, size, color);
+        return this;
+    }
+
+    /**
+     * Draws multi-line wrapped text using a {@link VGFont}.
+     *
+     * @param text          text to draw
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          font handle
+     * @param size          font size in pixels
+     * @param color         text color
+     * @param align         alignment flags
+     * @return this canvas
+     * @see VGDraw#textBox(long, String, float, float, float, VGFont, float, VGColor, int)
+     */
+    public VGCanvas textBox(String text, float x, float y, float breakRowWidth,
+                            VGFont font, float size, VGColor color, int align) {
+        VGDraw.textBox(vg, text, x, y, breakRowWidth, font, size, color, align);
+        return this;
+    }
+
+    /**
+     * Draws multi-line wrapped text using a {@link VGFont} with default alignment.
+     *
+     * @param text          text to draw
+     * @param x             left edge
+     * @param y             top edge
+     * @param breakRowWidth maximum line width
+     * @param font          font handle
+     * @param size          font size in pixels
+     * @param color         text color
+     * @return this canvas
+     * @see VGDraw#textBox(long, String, float, float, float, VGFont, float, VGColor)
+     */
+    public VGCanvas textBox(String text, float x, float y, float breakRowWidth,
+                            VGFont font, float size, VGColor color) {
+        VGDraw.textBox(vg, text, x, y, breakRowWidth, font, size, color);
         return this;
     }
 
@@ -520,6 +1076,19 @@ public final class VGCanvas {
     }
 
     /**
+     * Measures the advance width of a line of text using a {@link VGFont}.
+     *
+     * @param text text to measure
+     * @param font font handle
+     * @param size font size in pixels
+     * @return the advance width
+     * @see VGDraw#textWidth(long, String, VGFont, float)
+     */
+    public float textWidth(String text, VGFont font, float size) {
+        return VGDraw.textWidth(vg, text, font, size);
+    }
+
+    /**
      * Measures the bounding box of a line of text.
      *
      * @param text      text to measure
@@ -531,5 +1100,318 @@ public final class VGCanvas {
      */
     public float[] textBounds(String text, String font, float size, float[] outBounds) {
         return VGDraw.textBounds(vg, text, font, size, outBounds);
+    }
+
+    /**
+     * Measures the bounding box of a line of text using a {@link VGFont}.
+     *
+     * @param text      text to measure
+     * @param font      font handle
+     * @param size      font size in pixels
+     * @param outBounds destination array, or {@code null}
+     * @return {@code [minX, minY, maxX, maxY]}
+     * @see VGDraw#textBounds(long, String, VGFont, float, float[])
+     */
+    public float[] textBounds(String text, VGFont font, float size, float[] outBounds) {
+        return VGDraw.textBounds(vg, text, font, size, outBounds);
+    }
+
+    /**
+     * Measures the bounding box of multi-line wrapped text.
+     *
+     * @param text          text to measure
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          font face name
+     * @param size          font size in pixels
+     * @param outBounds     destination array, or {@code null}
+     * @return {@code [minX, minY, maxX, maxY]}
+     * @see VGDraw#textBoxBounds(long, String, float, float, float, String, float, float[])
+     */
+    public float[] textBoxBounds(String text, float x, float y, float breakRowWidth,
+                                 String font, float size, float[] outBounds) {
+        return VGDraw.textBoxBounds(vg, text, x, y, breakRowWidth, font, size, outBounds);
+    }
+
+    /**
+     * Measures the bounding box of multi-line wrapped text using a {@link VGFont}.
+     *
+     * @param text          text to measure
+     * @param x             anchor x
+     * @param y             anchor y
+     * @param breakRowWidth maximum line width
+     * @param font          font handle
+     * @param size          font size in pixels
+     * @param outBounds     destination array, or {@code null}
+     * @return {@code [minX, minY, maxX, maxY]}
+     * @see VGDraw#textBoxBounds(long, String, float, float, float, VGFont, float, float[])
+     */
+    public float[] textBoxBounds(String text, float x, float y, float breakRowWidth,
+                                 VGFont font, float size, float[] outBounds) {
+        return VGDraw.textBoxBounds(vg, text, x, y, breakRowWidth, font, size, outBounds);
+    }
+
+    /**
+     * Computes the total rendered height of multi-line wrapped text.
+     *
+     * @param text          text to measure
+     * @param breakRowWidth maximum line width
+     * @param font          font face name
+     * @param size          font size in pixels
+     * @return total height in pixels
+     * @see VGDraw#textBoxHeight(long, String, float, String, float)
+     */
+    public float textBoxHeight(String text, float breakRowWidth, String font, float size) {
+        return VGDraw.textBoxHeight(vg, text, breakRowWidth, font, size);
+    }
+
+    /**
+     * Computes the total rendered height of multi-line wrapped text using a {@link VGFont}.
+     *
+     * @param text          text to measure
+     * @param breakRowWidth maximum line width
+     * @param font          font handle
+     * @param size          font size in pixels
+     * @return total height in pixels
+     * @see VGDraw#textBoxHeight(long, String, float, VGFont, float)
+     */
+    public float textBoxHeight(String text, float breakRowWidth, VGFont font, float size) {
+        return VGDraw.textBoxHeight(vg, text, breakRowWidth, font, size);
+    }
+
+    /**
+     * Sets the text line height multiplier.
+     *
+     * @param lineHeight line height multiplier
+     * @return this canvas
+     * @see VGDraw#textLineHeight(long, float)
+     */
+    public VGCanvas textLineHeight(float lineHeight) {
+        VGDraw.textLineHeight(vg, lineHeight);
+        return this;
+    }
+
+    /**
+     * Sets the text letter spacing in pixels.
+     *
+     * @param spacing spacing in pixels
+     * @return this canvas
+     * @see VGDraw#textLetterSpacing(long, float)
+     */
+    public VGCanvas textLetterSpacing(float spacing) {
+        VGDraw.textLetterSpacing(vg, spacing);
+        return this;
+    }
+
+    /**
+     * Draws an image into a rectangle with optional rounded corners and opacity.
+     *
+     * @param image  native image handle
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param radius corner radius
+     * @param alpha  opacity in [0, 1]
+     * @return this canvas
+     * @see VGDraw#image(long, int, float, float, float, float, float, float)
+     */
+    public VGCanvas image(int image, float x, float y, float w, float h, float radius, float alpha) {
+        VGDraw.image(vg, image, x, y, w, h, radius, alpha);
+        return this;
+    }
+
+    /**
+     * Draws an opaque, unrounded image rectangle.
+     *
+     * @param image native image handle
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     * @return this canvas
+     * @see VGDraw#image(long, int, float, float, float, float)
+     */
+    public VGCanvas image(int image, float x, float y, float w, float h) {
+        VGDraw.image(vg, image, x, y, w, h);
+        return this;
+    }
+
+    /**
+     * Draws an image into a rectangle with optional rounded corners and opacity using a {@link VGImage}.
+     *
+     * @param image  image instance
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param radius corner radius
+     * @param alpha  opacity in [0, 1]
+     * @return this canvas
+     * @see VGDraw#image(long, VGImage, float, float, float, float, float, float)
+     */
+    public VGCanvas image(VGImage image, float x, float y, float w, float h, float radius, float alpha) {
+        VGDraw.image(vg, image, x, y, w, h, radius, alpha);
+        return this;
+    }
+
+    /**
+     * Draws an opaque, unrounded image rectangle using a {@link VGImage}.
+     *
+     * @param image image instance
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     * @return this canvas
+     * @see VGDraw#image(long, VGImage, float, float, float, float)
+     */
+    public VGCanvas image(VGImage image, float x, float y, float w, float h) {
+        VGDraw.image(vg, image, x, y, w, h);
+        return this;
+    }
+
+    /**
+     * Deletes a texture image on the GPU.
+     *
+     * @param image native image handle
+     * @return this canvas
+     * @see VGDraw#deleteImage(long, int)
+     */
+    public VGCanvas deleteImage(int image) {
+        VGDraw.deleteImage(vg, image);
+        return this;
+    }
+
+    /**
+     * Deletes a texture image on the GPU using a {@link VGImage}.
+     *
+     * @param image image instance
+     * @return this canvas
+     * @see VGDraw#deleteImage(long, VGImage)
+     */
+    public VGCanvas deleteImage(VGImage image) {
+        VGDraw.deleteImage(vg, image);
+        return this;
+    }
+
+    /**
+     * Queries the dimensions of an image handle.
+     *
+     * @param image   image handle
+     * @param outSize destination array [width, height], or {@code null}
+     * @return array holding [width, height]
+     * @see VGDraw#imageSize(long, int, int[])
+     */
+    public int[] imageSize(int image, int[] outSize) {
+        return VGDraw.imageSize(vg, image, outSize);
+    }
+
+    /**
+     * Queries the dimensions of an image handle without heap allocation.
+     *
+     * @param image image handle
+     * @return array holding [width, height]
+     * @see VGDraw#imageSize(long, int)
+     */
+    public int[] imageSize(int image) {
+        return VGDraw.imageSize(vg, image);
+    }
+
+    /**
+     * Creates and loads an image with flags.
+     *
+     * @param path  file path
+     * @param flags image creation flags
+     * @return loaded image
+     */
+    public VGImage createImage(String path, int flags) {
+        return VGImage.load(vg, path, flags);
+    }
+
+    /**
+     * Creates and loads an image with default flags (0).
+     *
+     * @param path file path
+     * @return loaded image
+     */
+    public VGImage createImage(String path) {
+        return VGImage.load(vg, path);
+    }
+
+    /**
+     * Creates and loads an image from an input stream with flags.
+     *
+     * @param stream input stream
+     * @param flags  image creation flags
+     * @return loaded image
+     */
+    public VGImage createImage(InputStream stream, int flags) {
+        return VGImage.load(vg, stream, flags);
+    }
+
+    /**
+     * Creates and loads an image from an input stream with default flags (0).
+     *
+     * @param stream input stream
+     * @return loaded image
+     */
+    public VGImage createImage(InputStream stream) {
+        return VGImage.load(vg, stream);
+    }
+
+    /**
+     * Creates and loads an image from a classpath resource with flags.
+     *
+     * @param resourcePath classpath path
+     * @param flags        image creation flags
+     * @return loaded image
+     */
+    public VGImage createImageFromResource(String resourcePath, int flags) {
+        return VGImage.loadResource(vg, resourcePath, flags);
+    }
+
+    /**
+     * Creates and loads an image from a classpath resource with default flags (0).
+     *
+     * @param resourcePath classpath path
+     * @return loaded image
+     */
+    public VGImage createImageFromResource(String resourcePath) {
+        return VGImage.loadResource(vg, resourcePath);
+    }
+
+    /**
+     * Creates and registers a font face from an on-disk file path.
+     *
+     * @param name font face name
+     * @param path file path
+     * @return loaded font
+     */
+    public VGFont createFont(String name, String path) {
+        return VGFont.load(vg, name, path);
+    }
+
+    /**
+     * Creates and registers a font face from an input stream.
+     *
+     * @param name   font face name
+     * @param stream input stream
+     * @return loaded font
+     */
+    public VGFont createFont(String name, InputStream stream) {
+        return VGFont.load(vg, name, stream);
+    }
+
+    /**
+     * Creates and registers a font face from a classpath resource.
+     *
+     * @param name         font face name
+     * @param resourcePath resource path
+     * @return loaded font
+     */
+    public VGFont createFontFromResource(String name, String resourcePath) {
+        return VGFont.loadResource(vg, name, resourcePath);
     }
 }

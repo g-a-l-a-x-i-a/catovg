@@ -13,6 +13,14 @@ repositories {
 dependencies {
     api 'org.lwjgl:lwjgl:3.4.1'
     api 'org.lwjgl:lwjgl-nanovg:3.4.1'
+
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 java {
@@ -31,6 +39,7 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.withType(Javadoc).configureEach {
     options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
 }
 
 publishing {
