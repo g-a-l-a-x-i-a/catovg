@@ -6,11 +6,14 @@ import space.rawrclient.catovg.composite.VGCompositeOp;
 import space.rawrclient.catovg.draw.VGDraw;
 import space.rawrclient.catovg.font.VGFont;
 import space.rawrclient.catovg.image.VGImage;
+import space.rawrclient.catovg.paint.VGGradient;
 import space.rawrclient.catovg.paint.VGPaint;
+import space.rawrclient.catovg.path.VGPath;
 import space.rawrclient.catovg.stroke.VGLineCap;
 import space.rawrclient.catovg.stroke.VGLineJoin;
 
 import java.io.InputStream;
+import java.util.function.Consumer;
 
 import static org.lwjgl.nanovg.NanoVG.*;
 
@@ -76,6 +79,39 @@ public final class VGCanvas {
      */
     public VGCanvas restore() {
         VGDraw.restore(vg);
+        return this;
+    }
+
+    /**
+     * Opens an auto-closeable scope that restores the canvas state when closed.
+     * <pre>{@code
+     * try (var scope = canvas.scope()) {
+     *     canvas.translate(10, 10);
+     *     // ...
+     * }
+     * }</pre>
+     *
+     * @return an auto-closeable scope
+     */
+    public VGScope scope() {
+        save();
+        return this::restore;
+    }
+
+    /**
+     * Executes the given drawing actions within a scoped state block, guaranteeing state restoration.
+     *
+     * @param action drawing callback
+     * @return this canvas
+     */
+    public VGCanvas scoped(Consumer<VGCanvas> action) {
+        if (action == null) return this;
+        save();
+        try {
+            action.accept(this);
+        } finally {
+            restore();
+        }
         return this;
     }
 
@@ -159,6 +195,44 @@ public final class VGCanvas {
     }
 
     /**
+     * Executes the given drawing actions within an intersected scissor region, restoring canvas state on exit.
+     *
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param action drawing callback
+     * @return this canvas
+     */
+    public VGCanvas scissored(float x, float y, float w, float h, Consumer<VGCanvas> action) {
+        if (action == null) return this;
+        save();
+        try {
+            intersectScissor(x, y, w, h);
+            action.accept(this);
+        } finally {
+            restore();
+        }
+        return this;
+    }
+
+    /**
+     * Clips rendering to a rounded rectangle by intersecting scissor and erasing outer corners with destination-out.
+     *
+     * @param x      left edge
+     * @param y      top edge
+     * @param w      width
+     * @param h      height
+     * @param radius corner radius
+     * @param render drawing operations to clip
+     * @return this canvas
+     */
+    public VGCanvas clipRoundedRect(float x, float y, float w, float h, float radius, Runnable render) {
+        VGDraw.clipRoundedRect(vg, x, y, w, h, radius, render);
+        return this;
+    }
+
+    /**
      * Fills a rectangle.
      *
      * @param x     left edge
@@ -191,6 +265,22 @@ public final class VGCanvas {
     }
 
     /**
+     * Fills a rectangle with a multi-stop gradient.
+     *
+     * @param x        left edge
+     * @param y        top edge
+     * @param w        width
+     * @param h        height
+     * @param gradient multi-stop gradient
+     * @return this canvas
+     * @see VGDraw#rect(long, float, float, float, float, VGGradient)
+     */
+    public VGCanvas rect(float x, float y, float w, float h, VGGradient gradient) {
+        VGDraw.rect(vg, x, y, w, h, gradient);
+        return this;
+    }
+
+    /**
      * Strokes a rectangle outline.
      *
      * @param x           left edge
@@ -204,6 +294,11 @@ public final class VGCanvas {
      */
     public VGCanvas rectOutline(float x, float y, float w, float h, float strokeWidth, VGColor color) {
         VGDraw.rectOutline(vg, x, y, w, h, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas rectOutline(float x, float y, float w, float h, float strokeWidth, VGPaint paint) {
+        VGDraw.rectOutline(vg, x, y, w, h, strokeWidth, paint);
         return this;
     }
 
@@ -242,6 +337,23 @@ public final class VGCanvas {
     }
 
     /**
+     * Fills a rounded rectangle with a multi-stop gradient.
+     *
+     * @param x        left edge
+     * @param y        top edge
+     * @param w        width
+     * @param h        height
+     * @param radius   corner radius
+     * @param gradient multi-stop gradient
+     * @return this canvas
+     * @see VGDraw#roundedRect(long, float, float, float, float, float, VGGradient)
+     */
+    public VGCanvas roundedRect(float x, float y, float w, float h, float radius, VGGradient gradient) {
+        VGDraw.roundedRect(vg, x, y, w, h, radius, gradient);
+        return this;
+    }
+
+    /**
      * Strokes a rounded rectangle outline.
      *
      * @param x           left edge
@@ -257,6 +369,12 @@ public final class VGCanvas {
     public VGCanvas roundedRectOutline(float x, float y, float w, float h, float radius,
                                        float strokeWidth, VGColor color) {
         VGDraw.roundedRectOutline(vg, x, y, w, h, radius, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas roundedRectOutline(float x, float y, float w, float h, float radius,
+                                       float strokeWidth, VGPaint paint) {
+        VGDraw.roundedRectOutline(vg, x, y, w, h, radius, strokeWidth, paint);
         return this;
     }
 
@@ -305,6 +423,54 @@ public final class VGCanvas {
     }
 
     /**
+     * Strokes a rounded rectangle outline with varying corner radii.
+     *
+     * @param x              left edge
+     * @param y              top edge
+     * @param w              width
+     * @param h              height
+     * @param radTopLeft     top-left radius
+     * @param radTopRight    top-right radius
+     * @param radBottomRight bottom-right radius
+     * @param radBottomLeft  bottom-left radius
+     * @param strokeWidth    stroke width
+     * @param color          stroke color
+     * @return this canvas
+     * @see VGDraw#roundedRectVaryingOutline(long, float, float, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas roundedRectVaryingOutline(float x, float y, float w, float h,
+                                                float radTopLeft, float radTopRight,
+                                                float radBottomRight, float radBottomLeft,
+                                                float strokeWidth, VGColor color) {
+        VGDraw.roundedRectVaryingOutline(vg, x, y, w, h, radTopLeft, radTopRight, radBottomRight, radBottomLeft, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a rounded rectangle outline with varying corner radii and paint.
+     *
+     * @param x              left edge
+     * @param y              top edge
+     * @param w              width
+     * @param h              height
+     * @param radTopLeft     top-left radius
+     * @param radTopRight    top-right radius
+     * @param radBottomRight bottom-right radius
+     * @param radBottomLeft  bottom-left radius
+     * @param strokeWidth    stroke width
+     * @param paint          stroke paint
+     * @return this canvas
+     * @see VGDraw#roundedRectVaryingOutline(long, float, float, float, float, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas roundedRectVaryingOutline(float x, float y, float w, float h,
+                                                float radTopLeft, float radTopRight,
+                                                float radBottomRight, float radBottomLeft,
+                                                float strokeWidth, VGPaint paint) {
+        VGDraw.roundedRectVaryingOutline(vg, x, y, w, h, radTopLeft, radTopRight, radBottomRight, radBottomLeft, strokeWidth, paint);
+        return this;
+    }
+
+    /**
      * Fills a circle with color.
      *
      * @param cx     center x
@@ -335,6 +501,21 @@ public final class VGCanvas {
     }
 
     /**
+     * Fills a circle with a multi-stop gradient.
+     *
+     * @param cx       center x
+     * @param cy       center y
+     * @param radius   radius
+     * @param gradient multi-stop gradient
+     * @return this canvas
+     * @see VGDraw#circle(long, float, float, float, VGGradient)
+     */
+    public VGCanvas circle(float cx, float cy, float radius, VGGradient gradient) {
+        VGDraw.circle(vg, cx, cy, radius, gradient);
+        return this;
+    }
+
+    /**
      * Strokes a circle outline.
      *
      * @param cx          center x
@@ -351,6 +532,50 @@ public final class VGCanvas {
     }
 
     /**
+     * Strokes a circle outline with a paint.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param radius      radius
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     * @see VGDraw#circleOutline(long, float, float, float, float, VGPaint)
+     */
+    public VGCanvas circleOutline(float cx, float cy, float radius, float strokeWidth, VGPaint paint) {
+        VGDraw.circleOutline(vg, cx, cy, radius, strokeWidth, paint);
+        return this;
+    }
+
+    /**
+     * Alias for {@link #circleOutline(float, float, float, float, VGColor)}.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param radius      radius
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     */
+    public VGCanvas ring(float cx, float cy, float radius, float strokeWidth, VGColor color) {
+        return circleOutline(cx, cy, radius, strokeWidth, color);
+    }
+
+    /**
+     * Alias for {@link #circleOutline(float, float, float, float, VGPaint)}.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param radius      radius
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     */
+    public VGCanvas ring(float cx, float cy, float radius, float strokeWidth, VGPaint paint) {
+        return circleOutline(cx, cy, radius, strokeWidth, paint);
+    }
+
+    /**
      * Fills an ellipse.
      *
      * @param cx    center x
@@ -363,6 +588,56 @@ public final class VGCanvas {
      */
     public VGCanvas ellipse(float cx, float cy, float rx, float ry, VGColor color) {
         VGDraw.ellipse(vg, cx, cy, rx, ry, color);
+        return this;
+    }
+
+    /**
+     * Fills an ellipse with a paint.
+     *
+     * @param cx    center x
+     * @param cy    center y
+     * @param rx    horizontal radius
+     * @param ry    vertical radius
+     * @param paint fill paint
+     * @return this canvas
+     * @see VGDraw#ellipse(long, float, float, float, float, VGPaint)
+     */
+    public VGCanvas ellipse(float cx, float cy, float rx, float ry, VGPaint paint) {
+        VGDraw.ellipse(vg, cx, cy, rx, ry, paint);
+        return this;
+    }
+
+    /**
+     * Strokes the outline of an ellipse with a color.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param rx          horizontal radius
+     * @param ry          vertical radius
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#ellipseOutline(long, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas ellipseOutline(float cx, float cy, float rx, float ry, float strokeWidth, VGColor color) {
+        VGDraw.ellipseOutline(vg, cx, cy, rx, ry, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes the outline of an ellipse with a paint.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param rx          horizontal radius
+     * @param ry          vertical radius
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     * @see VGDraw#ellipseOutline(long, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas ellipseOutline(float cx, float cy, float rx, float ry, float strokeWidth, VGPaint paint) {
+        VGDraw.ellipseOutline(vg, cx, cy, rx, ry, strokeWidth, paint);
         return this;
     }
 
@@ -401,6 +676,16 @@ public final class VGCanvas {
         return this;
     }
 
+    public VGCanvas line(float x1, float y1, float x2, float y2, float strokeWidth, VGPaint paint) {
+        VGDraw.line(vg, x1, y1, x2, y2, strokeWidth, paint);
+        return this;
+    }
+
+    public VGCanvas line(float x1, float y1, float x2, float y2, float strokeWidth, VGPaint paint, VGLineCap cap) {
+        VGDraw.line(vg, x1, y1, x2, y2, strokeWidth, paint, cap);
+        return this;
+    }
+
     /**
      * Strokes a circular arc.
      *
@@ -418,6 +703,12 @@ public final class VGCanvas {
     public VGCanvas arc(float cx, float cy, float radius, float a0, float a1, int dir,
                         float strokeWidth, VGColor color) {
         VGDraw.arc(vg, cx, cy, radius, a0, a1, dir, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas arc(float cx, float cy, float radius, float a0, float a1, int dir,
+                        float strokeWidth, VGPaint paint) {
+        VGDraw.arc(vg, cx, cy, radius, a0, a1, dir, strokeWidth, paint);
         return this;
     }
 
@@ -443,6 +734,169 @@ public final class VGCanvas {
     }
 
     /**
+     * Fills a quadrilateral with a paint.
+     *
+     * @param x1    vertex 1 x
+     * @param y1    vertex 1 y
+     * @param x2    vertex 2 x
+     * @param y2    vertex 2 y
+     * @param x3    vertex 3 x
+     * @param y3    vertex 3 y
+     * @param x4    vertex 4 x
+     * @param y4    vertex 4 y
+     * @param paint fill paint
+     * @return this canvas
+     * @see VGDraw#quad(long, float, float, float, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas quad(float x1, float y1, float x2, float y2,
+                         float x3, float y3, float x4, float y4, VGPaint paint) {
+        VGDraw.quad(vg, x1, y1, x2, y2, x3, y3, x4, y4, paint);
+        return this;
+    }
+
+    /**
+     * Fills a triangle.
+     *
+     * @param x1    vertex 1 x
+     * @param y1    vertex 1 y
+     * @param x2    vertex 2 x
+     * @param y2    vertex 2 y
+     * @param x3    vertex 3 x
+     * @param y3    vertex 3 y
+     * @param color fill color
+     * @return this canvas
+     * @see VGDraw#triangle(long, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas triangle(float x1, float y1, float x2, float y2, float x3, float y3, VGColor color) {
+        VGDraw.triangle(vg, x1, y1, x2, y2, x3, y3, color);
+        return this;
+    }
+
+    /**
+     * Fills a triangle with a paint.
+     *
+     * @param x1    vertex 1 x
+     * @param y1    vertex 1 y
+     * @param x2    vertex 2 x
+     * @param y2    vertex 2 y
+     * @param x3    vertex 3 x
+     * @param y3    vertex 3 y
+     * @param paint fill paint
+     * @return this canvas
+     * @see VGDraw#triangle(long, float, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas triangle(float x1, float y1, float x2, float y2, float x3, float y3, VGPaint paint) {
+        VGDraw.triangle(vg, x1, y1, x2, y2, x3, y3, paint);
+        return this;
+    }
+
+    /**
+     * Strokes a triangle outline.
+     *
+     * @param x1          vertex 1 x
+     * @param y1          vertex 1 y
+     * @param x2          vertex 2 x
+     * @param y2          vertex 2 y
+     * @param x3          vertex 3 x
+     * @param y3          vertex 3 y
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#triangleOutline(long, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas triangleOutline(float x1, float y1, float x2, float y2, float x3, float y3,
+                                    float strokeWidth, VGColor color) {
+        VGDraw.triangleOutline(vg, x1, y1, x2, y2, x3, y3, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a triangle outline with a paint.
+     *
+     * @param x1          vertex 1 x
+     * @param y1          vertex 1 y
+     * @param x2          vertex 2 x
+     * @param y2          vertex 2 y
+     * @param x3          vertex 3 x
+     * @param y3          vertex 3 y
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     * @see VGDraw#triangleOutline(long, float, float, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas triangleOutline(float x1, float y1, float x2, float y2, float x3, float y3,
+                                    float strokeWidth, VGPaint paint) {
+        VGDraw.triangleOutline(vg, x1, y1, x2, y2, x3, y3, strokeWidth, paint);
+        return this;
+    }
+
+    /**
+     * Fills a pill / capsule primitive.
+     *
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     * @param color fill color
+     * @return this canvas
+     * @see VGDraw#pill(long, float, float, float, float, VGColor)
+     */
+    public VGCanvas pill(float x, float y, float w, float h, VGColor color) {
+        VGDraw.pill(vg, x, y, w, h, color);
+        return this;
+    }
+
+    /**
+     * Fills a pill / capsule primitive with a paint.
+     *
+     * @param x     left edge
+     * @param y     top edge
+     * @param w     width
+     * @param h     height
+     * @param paint fill paint
+     * @return this canvas
+     * @see VGDraw#pill(long, float, float, float, float, VGPaint)
+     */
+    public VGCanvas pill(float x, float y, float w, float h, VGPaint paint) {
+        VGDraw.pill(vg, x, y, w, h, paint);
+        return this;
+    }
+
+    /**
+     * Strokes a pill / capsule outline.
+     *
+     * @param x           left edge
+     * @param y           top edge
+     * @param w           width
+     * @param h           height
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#pillOutline(long, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas pillOutline(float x, float y, float w, float h, float strokeWidth, VGColor color) {
+        VGDraw.pillOutline(vg, x, y, w, h, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes a pill / capsule outline with a paint.
+     *
+     * @param x           left edge
+     * @param y           top edge
+     * @param w           width
+     * @param h           height
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     * @see VGDraw#pillOutline(long, float, float, float, float, float, VGPaint)
+     */
+    public VGCanvas pillOutline(float x, float y, float w, float h, float strokeWidth, VGPaint paint) {
+        VGDraw.pillOutline(vg, x, y, w, h, strokeWidth, paint);
+        return this;
+    }
+
+    /**
      * Strokes a cubic bezier curve.
      *
      * @param sx          start x
@@ -459,8 +913,26 @@ public final class VGCanvas {
      * @see VGDraw#bezier(long, float, float, float, float, float, float, float, float, float, VGColor)
      */
     public VGCanvas bezier(float sx, float sy, float c1x, float c1y, float c2x, float c2y,
-                          float ex, float ey, float strokeWidth, VGColor color) {
+                           float ex, float ey, float strokeWidth, VGColor color) {
         VGDraw.bezier(vg, sx, sy, c1x, c1y, c2x, c2y, ex, ey, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas bezier(float sx, float sy, float c1x, float c1y, float c2x, float c2y,
+                           float ex, float ey, float strokeWidth, VGPaint paint) {
+        VGDraw.bezier(vg, sx, sy, c1x, c1y, c2x, c2y, ex, ey, strokeWidth, paint);
+        return this;
+    }
+
+    public VGCanvas bezier(float sx, float sy, float c1x, float c1y, float c2x, float c2y,
+                           float ex, float ey, float strokeWidth, VGColor color, VGLineCap cap, VGLineJoin join) {
+        VGDraw.bezier(vg, sx, sy, c1x, c1y, c2x, c2y, ex, ey, strokeWidth, color, cap, join);
+        return this;
+    }
+
+    public VGCanvas bezier(float sx, float sy, float c1x, float c1y, float c2x, float c2y,
+                           float ex, float ey, float strokeWidth, VGPaint paint, VGLineCap cap, VGLineJoin join) {
+        VGDraw.bezier(vg, sx, sy, c1x, c1y, c2x, c2y, ex, ey, strokeWidth, paint, cap, join);
         return this;
     }
 
@@ -479,8 +951,26 @@ public final class VGCanvas {
      * @see VGDraw#quadCurve(long, float, float, float, float, float, float, float, VGColor)
      */
     public VGCanvas quadCurve(float sx, float sy, float cx, float cy,
-                             float ex, float ey, float strokeWidth, VGColor color) {
+                              float ex, float ey, float strokeWidth, VGColor color) {
         VGDraw.quadCurve(vg, sx, sy, cx, cy, ex, ey, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas quadCurve(float sx, float sy, float cx, float cy,
+                              float ex, float ey, float strokeWidth, VGPaint paint) {
+        VGDraw.quadCurve(vg, sx, sy, cx, cy, ex, ey, strokeWidth, paint);
+        return this;
+    }
+
+    public VGCanvas quadCurve(float sx, float sy, float cx, float cy,
+                              float ex, float ey, float strokeWidth, VGColor color, VGLineCap cap, VGLineJoin join) {
+        VGDraw.quadCurve(vg, sx, sy, cx, cy, ex, ey, strokeWidth, color, cap, join);
+        return this;
+    }
+
+    public VGCanvas quadCurve(float sx, float sy, float cx, float cy,
+                              float ex, float ey, float strokeWidth, VGPaint paint, VGLineCap cap, VGLineJoin join) {
+        VGDraw.quadCurve(vg, sx, sy, cx, cy, ex, ey, strokeWidth, paint, cap, join);
         return this;
     }
 
@@ -858,6 +1348,28 @@ public final class VGCanvas {
     }
 
     /**
+     * Draws a drop shadow with custom horizontal and vertical offsets.
+     *
+     * @param x           box left edge
+     * @param y           box top edge
+     * @param w           box width
+     * @param h           box height
+     * @param radius      box corner radius
+     * @param blur        shadow blur distance
+     * @param spread      shadow spread distance
+     * @param offsetX     horizontal offset
+     * @param offsetY     vertical offset
+     * @param shadowColor shadow color
+     * @return this canvas
+     * @see VGDraw#shadow(long, float, float, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas shadow(float x, float y, float w, float h, float radius, float blur, float spread,
+                           float offsetX, float offsetY, VGColor shadowColor) {
+        VGDraw.shadow(vg, x, y, w, h, radius, blur, spread, offsetX, offsetY, shadowColor);
+        return this;
+    }
+
+    /**
      * Draws a drop shadow.
      *
      * @param x           box left edge
@@ -874,6 +1386,99 @@ public final class VGCanvas {
     public VGCanvas shadow(float x, float y, float w, float h, float radius, float blur, float spread,
                            VGColor shadowColor) {
         VGDraw.shadow(vg, x, y, w, h, radius, blur, spread, shadowColor);
+        return this;
+    }
+
+    /**
+     * Draws an inset / inner shadow with custom horizontal and vertical offsets.
+     *
+     * @param x       box left edge
+     * @param y       box top edge
+     * @param w       box width
+     * @param h       box height
+     * @param radius  box corner radius
+     * @param blur    blur distance
+     * @param spread  spread distance
+     * @param offsetX horizontal offset
+     * @param offsetY vertical offset
+     * @param color   shadow color
+     * @return this canvas
+     * @see VGDraw#innerShadow(long, float, float, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas innerShadow(float x, float y, float w, float h, float radius, float blur, float spread,
+                                float offsetX, float offsetY, VGColor color) {
+        VGDraw.innerShadow(vg, x, y, w, h, radius, blur, spread, offsetX, offsetY, color);
+        return this;
+    }
+
+    /**
+     * Draws an inset / inner shadow.
+     *
+     * @param x      box left edge
+     * @param y      box top edge
+     * @param w      box width
+     * @param h      box height
+     * @param radius box corner radius
+     * @param blur   blur distance
+     * @param spread spread distance
+     * @param color  shadow color
+     * @return this canvas
+     * @see VGDraw#innerShadow(long, float, float, float, float, float, float, float, VGColor)
+     */
+    public VGCanvas innerShadow(float x, float y, float w, float h, float radius, float blur, float spread,
+                                VGColor color) {
+        VGDraw.innerShadow(vg, x, y, w, h, radius, blur, spread, color);
+        return this;
+    }
+
+    /**
+     * Draws a conical / angular gradient filled circle.
+     *
+     * @param cx         center x
+     * @param cy         center y
+     * @param radius     radius
+     * @param startAngle start angle in radians
+     * @param colors     color stops
+     * @param stops      stop offsets in {@code [0, 1]}, or {@code null}
+     * @param segments   number of fan segments
+     * @return this canvas
+     * @see VGDraw#conicalGradient(long, float, float, float, float, VGColor[], float[], int)
+     */
+    public VGCanvas conicalGradient(float cx, float cy, float radius, float startAngle,
+                                    VGColor[] colors, float[] stops, int segments) {
+        VGDraw.conicalGradient(vg, cx, cy, radius, startAngle, colors, stops, segments);
+        return this;
+    }
+
+    public VGCanvas conicalGradient(float cx, float cy, float radius, float startAngle,
+                                    VGColor[] colors, float[] stops) {
+        VGDraw.conicalGradient(vg, cx, cy, radius, startAngle, colors, stops);
+        return this;
+    }
+
+    /**
+     * Draws a conical / angular gradient ring / donut.
+     *
+     * @param cx          center x
+     * @param cy          center y
+     * @param innerRadius inner radius
+     * @param outerRadius outer radius
+     * @param startAngle  start angle in radians
+     * @param colors      color stops
+     * @param stops       stop offsets in {@code [0, 1]}, or {@code null}
+     * @param segments    number of fan segments
+     * @return this canvas
+     * @see VGDraw#conicalGradientRing(long, float, float, float, float, float, VGColor[], float[], int)
+     */
+    public VGCanvas conicalGradientRing(float cx, float cy, float innerRadius, float outerRadius, float startAngle,
+                                        VGColor[] colors, float[] stops, int segments) {
+        VGDraw.conicalGradientRing(vg, cx, cy, innerRadius, outerRadius, startAngle, colors, stops, segments);
+        return this;
+    }
+
+    public VGCanvas conicalGradientRing(float cx, float cy, float innerRadius, float outerRadius, float startAngle,
+                                        VGColor[] colors, float[] stops) {
+        VGDraw.conicalGradientRing(vg, cx, cy, innerRadius, outerRadius, startAngle, colors, stops);
         return this;
     }
 
@@ -981,6 +1586,123 @@ public final class VGCanvas {
      */
     public VGCanvas text(String text, float x, float y, VGFont font, float size, VGColor color) {
         VGDraw.text(vg, text, x, y, font, size, color);
+        return this;
+    }
+
+    /**
+     * Draws multi-line text split by newlines.
+     *
+     * @param text                 multi-line text
+     * @param x                    anchor x
+     * @param y                    anchor y
+     * @param font                 font face name, or {@code null}
+     * @param size                 font size in pixels
+     * @param lineHeightMultiplier line height multiplier (e.g. 1.2f)
+     * @param color                text color
+     * @param align                NanoVG alignment flags
+     * @return this canvas
+     * @see VGDraw#textMultiline(long, String, float, float, String, float, float, VGColor, int)
+     */
+    public VGCanvas textMultiline(String text, float x, float y, String font, float size,
+                                  float lineHeightMultiplier, VGColor color, int align) {
+        VGDraw.textMultiline(vg, text, x, y, font, size, lineHeightMultiplier, color, align);
+        return this;
+    }
+
+    public VGCanvas textMultiline(String text, float x, float y, String font, float size,
+                                  float lineHeightMultiplier, VGColor color) {
+        VGDraw.textMultiline(vg, text, x, y, font, size, lineHeightMultiplier, color);
+        return this;
+    }
+
+    public VGCanvas textMultiline(String text, float x, float y, VGFont font, float size,
+                                  float lineHeightMultiplier, VGColor color, int align) {
+        VGDraw.textMultiline(vg, text, x, y, font, size, lineHeightMultiplier, color, align);
+        return this;
+    }
+
+    public VGCanvas textMultiline(String text, float x, float y, VGFont font, float size,
+                                  float lineHeightMultiplier, VGColor color) {
+        VGDraw.textMultiline(vg, text, x, y, font, size, lineHeightMultiplier, color);
+        return this;
+    }
+
+    /**
+     * Draws text with a drop shadow offset.
+     *
+     * @param text        text to draw
+     * @param x           anchor x
+     * @param y           anchor y
+     * @param font        font face name, or {@code null}
+     * @param size        font size in pixels
+     * @param color       text color
+     * @param shadowColor shadow color
+     * @param offsetX     horizontal shadow offset
+     * @param offsetY     vertical shadow offset
+     * @param align       alignment flags
+     * @return this canvas
+     * @see VGDraw#textWithShadow(long, String, float, float, String, float, VGColor, VGColor, float, float, int)
+     */
+    public VGCanvas textWithShadow(String text, float x, float y, String font, float size,
+                                  VGColor color, VGColor shadowColor, float offsetX, float offsetY, int align) {
+        VGDraw.textWithShadow(vg, text, x, y, font, size, color, shadowColor, offsetX, offsetY, align);
+        return this;
+    }
+
+    public VGCanvas textWithShadow(String text, float x, float y, String font, float size,
+                                  VGColor color, VGColor shadowColor, float offsetX, float offsetY) {
+        VGDraw.textWithShadow(vg, text, x, y, font, size, color, shadowColor, offsetX, offsetY);
+        return this;
+    }
+
+    public VGCanvas textWithShadow(String text, float x, float y, VGFont font, float size,
+                                  VGColor color, VGColor shadowColor, float offsetX, float offsetY, int align) {
+        VGDraw.textWithShadow(vg, text, x, y, font, size, color, shadowColor, offsetX, offsetY, align);
+        return this;
+    }
+
+    public VGCanvas textWithShadow(String text, float x, float y, VGFont font, float size,
+                                  VGColor color, VGColor shadowColor, float offsetX, float offsetY) {
+        VGDraw.textWithShadow(vg, text, x, y, font, size, color, shadowColor, offsetX, offsetY);
+        return this;
+    }
+
+    /**
+     * Draws text with a contrasting multi-directional outline.
+     *
+     * @param text         text to draw
+     * @param x            anchor x
+     * @param y            anchor y
+     * @param font         font face name, or {@code null}
+     * @param size         font size in pixels
+     * @param color        text color
+     * @param outlineColor outline color
+     * @param strokeWidth  outline thickness
+     * @param align        alignment flags
+     * @return this canvas
+     * @see VGDraw#textWithOutline(long, String, float, float, String, float, VGColor, VGColor, float, int)
+     */
+    public VGCanvas textWithOutline(String text, float x, float y, String font, float size,
+                                   VGColor color, VGColor outlineColor, float strokeWidth, int align) {
+        VGDraw.textWithOutline(vg, text, x, y, font, size, color, outlineColor, strokeWidth, align);
+        return this;
+    }
+
+    public VGCanvas textWithOutline(String text, float x, float y, String font, float size,
+                                   VGColor color, VGColor outlineColor, float strokeWidth) {
+        VGDraw.textWithOutline(vg, text, x, y, font, size, color, outlineColor, strokeWidth);
+        return this;
+    }
+
+    public VGCanvas textWithOutline(String text, float x, float y, VGFont font, float size,
+                                   VGColor color, VGColor outlineColor, float strokeWidth, int align) {
+        VGDraw.textWithOutline(vg, text, x, y, font, size, color, outlineColor, strokeWidth, align);
+        return this;
+    }
+
+    public VGCanvas textWithOutline(String text, float x, float y, VGFont font, float size,
+                                   VGColor color, VGColor outlineColor, float strokeWidth) {
+        VGDraw.textWithOutline(vg, text, x, y, font, size, color, outlineColor, strokeWidth);
         return this;
     }
 
@@ -1178,6 +1900,88 @@ public final class VGCanvas {
      */
     public float textBoxHeight(String text, float breakRowWidth, VGFont font, float size) {
         return VGDraw.textBoxHeight(vg, text, breakRowWidth, font, size);
+    }
+
+    /**
+     * Measures vertical font metrics (ascender, descender, lineh).
+     *
+     * @param font       font face name, or {@code null}
+     * @param size       font size in pixels
+     * @param outMetrics destination array, or {@code null}
+     * @return {@code [ascent, descent, lineh]}
+     * @see VGDraw#textMetrics(long, String, float, float[])
+     */
+    public float[] textMetrics(String font, float size, float[] outMetrics) {
+        return VGDraw.textMetrics(vg, font, size, outMetrics);
+    }
+
+    public float[] textMetrics(VGFont font, float size, float[] outMetrics) {
+        return VGDraw.textMetrics(vg, font, size, outMetrics);
+    }
+
+    /**
+     * Measures the font ascender.
+     *
+     * @param font font face name, or {@code null}
+     * @param size font size in pixels
+     * @return ascender in pixels
+     * @see VGDraw#textAscent(long, String, float)
+     */
+    public float textAscent(String font, float size) {
+        return VGDraw.textAscent(vg, font, size);
+    }
+
+    public float textAscent(VGFont font, float size) {
+        return VGDraw.textAscent(vg, font, size);
+    }
+
+    /**
+     * Measures the font descender.
+     *
+     * @param font font face name, or {@code null}
+     * @param size font size in pixels
+     * @return descender in pixels
+     * @see VGDraw#textDescent(long, String, float)
+     */
+    public float textDescent(String font, float size) {
+        return VGDraw.textDescent(vg, font, size);
+    }
+
+    public float textDescent(VGFont font, float size) {
+        return VGDraw.textDescent(vg, font, size);
+    }
+
+    /**
+     * Measures the font line height in pixels from font metrics.
+     *
+     * @param font font face name, or {@code null}
+     * @param size font size in pixels
+     * @return line height in pixels
+     * @see VGDraw#fontLineHeight(long, String, float)
+     */
+    public float fontLineHeight(String font, float size) {
+        return VGDraw.fontLineHeight(vg, font, size);
+    }
+
+    public float fontLineHeight(VGFont font, float size) {
+        return VGDraw.fontLineHeight(vg, font, size);
+    }
+
+    /**
+     * Measures the rendered height of a single line of text.
+     *
+     * @param text text to measure
+     * @param font font face name, or {@code null}
+     * @param size font size in pixels
+     * @return height in pixels
+     * @see VGDraw#textHeight(long, String, String, float)
+     */
+    public float textHeight(String text, String font, float size) {
+        return VGDraw.textHeight(vg, text, font, size);
+    }
+
+    public float textHeight(String text, VGFont font, float size) {
+        return VGDraw.textHeight(vg, text, font, size);
     }
 
     /**
@@ -1413,5 +2217,127 @@ public final class VGCanvas {
      */
     public VGFont createFontFromResource(String name, String resourcePath) {
         return VGFont.loadResource(vg, name, resourcePath);
+    }
+
+    /**
+     * Fills an SVG path with a solid color.
+     *
+     * @param path  parsed SVG path
+     * @param color fill color
+     * @return this canvas
+     * @see VGDraw#path(long, VGPath, VGColor)
+     */
+    public VGCanvas path(VGPath path, VGColor color) {
+        VGDraw.path(vg, path, color);
+        return this;
+    }
+
+    /**
+     * Fills an SVG path with a paint.
+     *
+     * @param path  parsed SVG path
+     * @param paint fill paint
+     * @return this canvas
+     * @see VGDraw#path(long, VGPath, VGPaint)
+     */
+    public VGCanvas path(VGPath path, VGPaint paint) {
+        VGDraw.path(vg, path, paint);
+        return this;
+    }
+
+    /**
+     * Parses and fills an SVG path string with a solid color.
+     *
+     * @param svgPath SVG path data string
+     * @param color   fill color
+     * @return this canvas
+     * @see VGDraw#path(long, String, VGColor)
+     */
+    public VGCanvas path(String svgPath, VGColor color) {
+        VGDraw.path(vg, svgPath, color);
+        return this;
+    }
+
+    /**
+     * Parses and fills an SVG path string with a paint.
+     *
+     * @param svgPath SVG path data string
+     * @param paint   fill paint
+     * @return this canvas
+     * @see VGDraw#path(long, String, VGPaint)
+     */
+    public VGCanvas path(String svgPath, VGPaint paint) {
+        VGDraw.path(vg, svgPath, paint);
+        return this;
+    }
+
+    /**
+     * Strokes an SVG path outline with a solid color.
+     *
+     * @param path        parsed SVG path
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @return this canvas
+     * @see VGDraw#pathOutline(long, VGPath, float, VGColor)
+     */
+    public VGCanvas pathOutline(VGPath path, float strokeWidth, VGColor color) {
+        VGDraw.pathOutline(vg, path, strokeWidth, color);
+        return this;
+    }
+
+    /**
+     * Strokes an SVG path outline with a paint.
+     *
+     * @param path        parsed SVG path
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @return this canvas
+     * @see VGDraw#pathOutline(long, VGPath, float, VGPaint)
+     */
+    public VGCanvas pathOutline(VGPath path, float strokeWidth, VGPaint paint) {
+        VGDraw.pathOutline(vg, path, strokeWidth, paint);
+        return this;
+    }
+
+    /**
+     * Strokes an SVG path outline with custom cap and join styles.
+     *
+     * @param path        parsed SVG path
+     * @param strokeWidth stroke width
+     * @param color       stroke color
+     * @param cap         line cap
+     * @param join        line join
+     * @return this canvas
+     * @see VGDraw#pathOutline(long, VGPath, float, VGColor, VGLineCap, VGLineJoin)
+     */
+    public VGCanvas pathOutline(VGPath path, float strokeWidth, VGColor color, VGLineCap cap, VGLineJoin join) {
+        VGDraw.pathOutline(vg, path, strokeWidth, color, cap, join);
+        return this;
+    }
+
+    /**
+     * Strokes an SVG path outline with a paint and custom cap and join styles.
+     *
+     * @param path        parsed SVG path
+     * @param strokeWidth stroke width
+     * @param paint       stroke paint
+     * @param cap         line cap
+     * @param join        line join
+     * @return this canvas
+     * @see VGDraw#pathOutline(long, VGPath, float, VGPaint, VGLineCap, VGLineJoin)
+     */
+    public VGCanvas pathOutline(VGPath path, float strokeWidth, VGPaint paint, VGLineCap cap, VGLineJoin join) {
+        VGDraw.pathOutline(vg, path, strokeWidth, paint, cap, join);
+        return this;
+    }
+
+    public VGCanvas pathOutline(String svgPath, float strokeWidth, VGColor color) {
+        VGDraw.pathOutline(vg, svgPath, strokeWidth, color);
+        return this;
+    }
+
+    public VGCanvas pathOutline(String svgPath, float strokeWidth, VGPaint paint) {
+        VGDraw.pathOutline(vg, svgPath, strokeWidth, paint);
+        return this;
     }
 }
